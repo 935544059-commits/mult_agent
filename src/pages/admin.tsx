@@ -193,20 +193,7 @@ export default function AdminPage() {
                   <AgentModeSwitch mode={mode} onChange={handleModeChange} />
                 </div>
 
-                <div>
-                  {mode === 'react' && (
-                    <>
-                      <h2 className="text-lg font-semibold text-gray-800 mb-4">系统提示词</h2>
-                      <textarea
-                        value={systemPrompt}
-                        onChange={(e) => setSystemPrompt(e.target.value)}
-                        rows={6}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none font-mono text-sm"
-                        placeholder="请输入系统提示词..."
-                      />
-                    </>
-                  )}
-                </div>
+
 
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -404,12 +391,6 @@ export default function AdminPage() {
 
         <div className="bg-white border-t border-gray-200 px-6 py-4 sticky bottom-0">
           <div className="max-w-4xl mx-auto flex items-center justify-end gap-4">
-            {mode === 'react' && (
-              <button className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-                <FileText className="w-4 h-4" />
-                导出 Word
-              </button>
-            )}
             <button className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
               接口测试
             </button>
