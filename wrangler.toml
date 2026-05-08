@@ -6,3 +6,6 @@ command = "npm run build"
 
 [env]
 NODE_ENV = "production"
+
+[assets]
+directory = "./.next"

@@ -3,13 +3,13 @@ import { FileText, Download, Loader2 } from 'lucide-react';
 import { ReActStep } from '@/types';
 
 interface SolutionReportCardProps {
-  steps: ReActStep[];
-  content: string;
+  steps?: ReActStep[];
+  content?: string;
 }
 
 export const SolutionReportCard: React.FC<SolutionReportCardProps> = ({
-  steps,
-  content,
+  steps = [],
+  content = '执行完成！综合分析所有步骤结果，已完成故障排查。',
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const fileName = '故障分析与处置建议书.docx';
