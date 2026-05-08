@@ -7,3 +7,6 @@ command = "npm run build"
 
 [env]
 NODE_ENV = "production"
+
+[assets]
+directory = "./out"  # 告诉 Cloudflare 从这里找静态文件
