@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Bot, MessageCircle, Loader2, RefreshCw, Plus } from 'lucide-react';
 import { ThoughtChain } from '@/components/ThoughtChain';
 import { Sidebar } from '@/components/Sidebar';
-import { Message, TaskStatus, ReActStep } from '@/types';
-import { chat, getTaskStatus, confirmAction, getAgentConfig } from '@/services/mockApi';
+import { Message, TaskStatus, ReActStep, PlannedStep } from '@/types';
+import { chat, getTaskStatus, confirmAction, confirmPlan, getAgentConfig } from '@/services/mockApi';
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -64,6 +64,8 @@ export default function ChatPage() {
           taskId: response.taskId,
           mode: 'react',
           steps: [],
+          plannedSteps: (response as any).plannedSteps || [],
+          isPlanning: !!(response as any).plannedSteps && (response as any).plannedSteps.length > 0,
           status: 'PENDING',
           timestamp: new Date().toISOString(),
         };
@@ -100,6 +102,8 @@ export default function ChatPage() {
               ...msg,
               status: status.status,
               steps: status.steps,
+              plannedSteps: status.plannedSteps,
+              isPlanning: status.isPlanning,
               finalAnswer: status.finalAnswer,
               requiresAction: status.requiresAction,
             };
@@ -155,6 +159,36 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('Error confirming action:', error);
+      setIsTyping(false);
+    }
+  };
+
+  const handleConfirmPlan = async (taskId: string, plannedSteps: PlannedStep[]) => {
+    setIsTyping(true);
+    
+    try {
+      const response = await confirmPlan(taskId, plannedSteps);
+      
+      setMessages(prev => prev.map(msg => {
+        if (msg.taskId === taskId) {
+          return {
+            ...msg,
+            status: response.status,
+            isPlanning: false,
+            plannedSteps: undefined,
+          };
+        }
+        return msg;
+      }));
+
+      if (response.status === 'RUNNING') {
+        pollTaskStatus(taskId);
+      } else {
+        setActiveTaskId(null);
+        setIsTyping(false);
+      }
+    } catch (error) {
+      console.error('Error confirming plan:', error);
       setIsTyping(false);
     }
   };
@@ -228,7 +262,10 @@ export default function ChatPage() {
                         status={message.status || 'PENDING'}
                         finalAnswer={message.finalAnswer}
                         requiresAction={message.requiresAction}
+                        isPlanning={message.isPlanning || false}
+                        plannedSteps={message.plannedSteps || []}
                         onConfirm={message.requiresAction && message.taskId ? (confirmed) => handleConfirmAction(message.taskId!, confirmed) : undefined}
+                        onConfirmPlan={message.isPlanning && message.taskId ? () => handleConfirmPlan(message.taskId!, message.plannedSteps || []) : undefined}
                         onRetry={() => {
                           const lastUserMsg = messages.filter(m => m.role === 'user').pop();
                           if (lastUserMsg) {

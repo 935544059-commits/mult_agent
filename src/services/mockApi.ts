@@ -1,5 +1,12 @@
 import { AgentConfig, ChatRequest, ChatResponse, TaskStatusResponse, ReActStep, APIConfig, TaskStatus } from '@/types';
 
+export interface PlannedStep {
+  id: string;
+  thought: string;
+  action: string;
+  actionParams?: Record<string, unknown>;
+}
+
 const mockAgent: AgentConfig = {
   id: 'agent-001',
   name: '测试智能体',
@@ -39,7 +46,7 @@ const mockAgent: AgentConfig = {
   updatedAt: '2024-01-01T00:00:00Z',
 };
 
-const mockReActSteps: Record<string, { steps: ReActStep[]; status: TaskStatus; currentStep: number; finalAnswer?: string; requiresAction?: TaskStatusResponse['requiresAction'] }> = {};
+const mockReActSteps: Record<string, { steps: ReActStep[]; status: TaskStatus; currentStep: number; finalAnswer?: string; requiresAction?: TaskStatusResponse['requiresAction']; plannedSteps?: PlannedStep[]; isPlanning: boolean }> = {};
 
 function generateTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -175,22 +182,26 @@ export async function chat(request: ChatRequest): Promise<ChatResponse> {
   
   if (agent.mode === 'react') {
     const steps = createReActSteps(request.message);
-    const requiresAction = agent.toolkits.find(t => t.name === steps[0]?.action && t.requiresConfirmation);
+    
+    const plannedSteps: PlannedStep[] = steps.map((step, index) => ({
+      id: `plan-step-${index + 1}`,
+      thought: step.thought,
+      action: step.action,
+      actionParams: step.actionParams,
+    }));
     
     mockReActSteps[taskId] = {
       steps,
-      status: requiresAction ? 'WAITING_USER' : 'RUNNING',
+      status: 'PENDING',
       currentStep: 0,
-      requiresAction: requiresAction ? {
-        action: steps[0].action!,
-        actionParams: steps[0].actionParams || {},
-        apiConfig: requiresAction,
-      } : undefined,
+      plannedSteps,
+      isPlanning: true,
     };
     
     return {
       taskId,
       mode: 'react',
+      plannedSteps,
     };
   } else {
     await new Promise(resolve => setTimeout(resolve, 1500));
@@ -215,7 +226,18 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse>
     };
   }
   
-  const { steps, status, currentStep, finalAnswer } = task;
+  const { steps, status, currentStep, finalAnswer, plannedSteps, isPlanning } = task;
+  
+  if (isPlanning) {
+    return {
+      taskId,
+      status: 'PENDING',
+      mode: 'react',
+      steps: [],
+      plannedSteps,
+      isPlanning: true,
+    };
+  }
   
   if (status === 'WAITING_USER') {
     return {
@@ -228,10 +250,29 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse>
   }
   
   if (currentStep < steps.length) {
+    const nextStep = steps[currentStep];
+    const requiresAction = mockAgent.toolkits.find(t => t.name === nextStep.action && t.requiresConfirmation);
+    
+    if (requiresAction && currentStep === 0) {
+      task.status = 'WAITING_USER';
+      task.requiresAction = {
+        action: nextStep.action,
+        actionParams: nextStep.actionParams || {},
+        apiConfig: requiresAction,
+      };
+      return {
+        taskId,
+        status: 'WAITING_USER',
+        mode: 'react',
+        steps: [],
+        requiresAction: task.requiresAction,
+      };
+    }
+    
     task.currentStep += 1;
     return {
       taskId,
-      status: currentStep >= steps.length ? 'COMPLETED' : 'RUNNING',
+      status: task.currentStep >= steps.length ? 'COMPLETED' : 'RUNNING',
       mode: 'react',
       steps: steps.slice(0, task.currentStep),
     };
@@ -278,6 +319,42 @@ export async function confirmAction(taskId: string, confirmed: boolean): Promise
     status: 'RUNNING',
     mode: 'react',
     steps: task.steps.slice(0, task.currentStep),
+  };
+}
+
+export async function confirmPlan(taskId: string, plannedSteps: PlannedStep[]): Promise<TaskStatusResponse> {
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  const task = mockReActSteps[taskId];
+  if (!task) {
+    return {
+      taskId,
+      status: 'FAILED',
+      mode: 'react',
+      steps: [],
+      error: '任务不存在',
+    };
+  }
+  
+  const updatedSteps: ReActStep[] = plannedSteps.map((step, index) => ({
+    id: `step-${index + 1}`,
+    thought: step.thought,
+    action: step.action,
+    actionParams: step.actionParams,
+    observation: '',
+    timestamp: new Date().toISOString(),
+  }));
+  
+  task.steps = updatedSteps;
+  task.isPlanning = false;
+  task.status = 'RUNNING';
+  
+  return {
+    taskId,
+    status: 'RUNNING',
+    mode: 'react',
+    steps: [],
+    isPlanning: false,
   };
 }
 

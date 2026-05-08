@@ -34,11 +34,20 @@ export interface ReActStep {
   timestamp: string;
 }
 
+export interface PlannedStep {
+  id: string;
+  thought: string;
+  action: string;
+  actionParams?: Record<string, unknown>;
+}
+
 export interface TaskStatusResponse {
   taskId: string;
   status: TaskStatus;
   mode: AgentMode;
   steps: ReActStep[];
+  plannedSteps?: PlannedStep[];
+  isPlanning?: boolean;
   finalAnswer?: string;
   requiresAction?: {
     action: string;
@@ -59,6 +68,7 @@ export interface ChatResponse {
   mode: AgentMode;
   answer?: string;
   error?: string;
+  plannedSteps?: PlannedStep[];
 }
 
 export interface Message {
@@ -68,6 +78,8 @@ export interface Message {
   taskId?: string;
   mode?: AgentMode;
   steps?: ReActStep[];
+  plannedSteps?: PlannedStep[];
+  isPlanning?: boolean;
   finalAnswer?: string;
   requiresAction?: TaskStatusResponse['requiresAction'];
   status?: TaskStatus;

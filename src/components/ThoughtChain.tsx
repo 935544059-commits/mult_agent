@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ReActStep, TaskStatus } from '@/types';
 import { SolutionReportCard } from './SolutionReportCard';
+import { PlannedSteps, PlannedStep } from './PlannedSteps';
 
 interface ThoughtChainProps {
   steps: ReActStep[];
@@ -28,6 +29,9 @@ interface ThoughtChainProps {
   };
   onConfirm?: (confirmed: boolean) => void;
   onRetry?: () => void;
+  isPlanning?: boolean;
+  plannedSteps?: PlannedStep[];
+  onConfirmPlan?: () => void;
 }
 
 const MAX_LOG_LENGTH = 200;
@@ -43,9 +47,13 @@ export const ThoughtChain: React.FC<ThoughtChainProps> = ({
   requiresAction,
   onConfirm,
   onRetry,
+  isPlanning = false,
+  plannedSteps = [],
+  onConfirmPlan,
 }) => {
   const [expanded, setExpanded] = useState(true);
   const [expandedLogs, setExpandedLogs] = useState<ExpandedLogs>({});
+  const [localPlannedSteps, setLocalPlannedSteps] = useState<PlannedStep[]>(plannedSteps);
 
   const toggleLogExpand = useCallback((stepId: string) => {
     setExpandedLogs(prev => ({
@@ -102,7 +110,15 @@ export const ThoughtChain: React.FC<ThoughtChainProps> = ({
 
       {expanded && (
         <div className="px-4 pb-4">
-          {requiresAction && status === 'WAITING_USER' && (
+          {isPlanning && (
+            <PlannedSteps
+              steps={localPlannedSteps}
+              onStepsChange={setLocalPlannedSteps}
+              onConfirm={onConfirmPlan}
+            />
+          )}
+
+          {!isPlanning && requiresAction && status === 'WAITING_USER' && (
             <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -139,8 +155,9 @@ export const ThoughtChain: React.FC<ThoughtChainProps> = ({
             </div>
           )}
 
-          <div className="space-y-3">
-            {steps.map((step, index) => (
+          {!isPlanning && (
+            <div className="space-y-3">
+              {steps.map((step, index) => (
               <div
                 key={step.id}
                 className="relative pl-6 pb-3 last:pb-0"
@@ -217,8 +234,9 @@ export const ThoughtChain: React.FC<ThoughtChainProps> = ({
               </div>
             ))}
           </div>
+          )}
 
-          {finalAnswer && status === 'COMPLETED' && (
+          {!isPlanning && finalAnswer && status === 'COMPLETED' && (
             <>
               <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg relative">
                 <div className="flex items-start justify-between">
