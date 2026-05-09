@@ -19,8 +19,6 @@ export interface AgentConfig {
   description?: string;
   mode: AgentMode;
   apiConfig?: APIConfig;
-  toolkits: APIConfig[];
-  systemPrompt: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -43,7 +41,7 @@ export interface TaskStatusResponse {
   requiresAction?: {
     action: string;
     actionParams: Record<string, unknown>;
-    apiConfig: APIConfig;
+    reason?: string;
   };
   error?: string;
 }
@@ -57,6 +55,7 @@ export interface ChatRequest {
 export interface ChatResponse {
   taskId?: string;
   mode: AgentMode;
+  status?: 'running' | 'need_confirmation';
   answer?: string;
   error?: string;
 }

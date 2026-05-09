@@ -2,44 +2,35 @@ import { AgentConfig, ChatRequest, ChatResponse, TaskStatusResponse, ReActStep, 
 
 const mockAgent: AgentConfig = {
   id: 'agent-001',
-  name: '测试智能体',
-  description: '用于演示双模式的测试智能体',
+  name: '智能分析服务',
+  description: '统一 API 代理模式的智能分析服务',
   mode: 'react',
-  toolkits: [
-    {
-      id: 'toolkit-001',
-      name: '天气查询',
-      url: 'https://api.weather.example.com/query',
-      method: 'GET',
-      description: '查询指定城市的天气信息',
-      authType: 'API_KEY',
-      requiresConfirmation: false,
-    },
-    {
-      id: 'toolkit-002',
-      name: '用户信息查询',
-      url: 'https://api.user.example.com/profile',
-      method: 'GET',
-      description: '查询用户详细信息（敏感接口）',
-      authType: 'BEARER_TOKEN',
-      requiresConfirmation: true,
-    },
-    {
-      id: 'toolkit-003',
-      name: '计算器',
-      url: 'https://api.calculator.example.com/compute',
-      method: 'POST',
-      description: '执行数学计算',
-      authType: 'NONE',
-      requiresConfirmation: false,
-    },
-  ],
-  systemPrompt: '你是一个智能助手，使用提供的工具来回答用户问题。按照以下格式输出：\n思考：你的思考过程\n行动：工具名称\n参数：{...}\n观察：工具返回结果',
+  apiConfig: {
+    id: 'api-gateway-001',
+    name: '智能分析服务',
+    url: 'https://api.example.com/agent',
+    method: 'POST',
+    authType: 'BEARER_TOKEN',
+    requiresConfirmation: false,
+  },
   createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
 };
 
-const mockReActSteps: Record<string, { steps: ReActStep[]; status: TaskStatus; currentStep: number; finalAnswer?: string; requiresAction?: TaskStatusResponse['requiresAction'] }> = {};
+interface TaskContext {
+  taskId: string;
+  status: TaskStatus;
+  currentStep: number;
+  steps: ReActStep[];
+  finalAnswer?: string;
+  requiresAction?: {
+    action: string;
+    actionParams: Record<string, unknown>;
+    reason: string;
+  };
+}
+
+const taskStore: Record<string, TaskContext> = {};
 
 function generateTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -67,144 +58,160 @@ const longDeviceLog = `[2024-01-15 08:30:00] INFO: 设备启动中...
 [2024-01-15 08:30:19] INFO: 磁盘空间: 可用 2.3GB / 总计 8GB
 [2024-01-15 08:30:20] INFO: 设备健康检查完成`;
 
-function createReActSteps(message: string): ReActStep[] {
-  const steps: ReActStep[] = [];
-  
+function generateBackendResponse(message: string): { steps: ReActStep[]; needConfirmation?: { action: string; reason: string } } {
   if (message.includes('天气') || message.includes('温度')) {
-    steps.push({
-      id: 'step-1',
-      thought: '用户想查询天气，我需要使用天气查询工具获取当前天气信息。',
-      action: '天气查询',
-      actionParams: { city: '北京' },
-      observation: '北京当前天气：晴朗，温度25°C，湿度60%',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-2',
-      thought: '已经获取到天气信息，现在可以总结回答用户的问题了。',
-      action: '总结回答',
-      observation: '已完成天气查询任务',
-      timestamp: new Date().toISOString(),
-    });
-  } else if (message.includes('用户信息') || message.includes('个人资料')) {
-    steps.push({
-      id: 'step-1',
-      thought: '用户想查询用户信息，这是一个敏感接口，需要先获取用户确认。',
-      action: '用户信息查询',
-      actionParams: { userId: 'user123' },
-      observation: '等待用户确认',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-2',
-      thought: '用户已确认，现在调用用户信息查询接口。',
-      action: '用户信息查询',
-      actionParams: { userId: 'user123' },
-      observation: '用户信息：姓名张三，邮箱zhangsan@example.com，注册时间2023-01-15',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-3',
-      thought: '已经获取到用户信息，可以总结回答了。',
-      action: '总结回答',
-      observation: '已完成用户信息查询',
-      timestamp: new Date().toISOString(),
-    });
-  } else if (message.includes('计算') || message.includes('+') || message.includes('-') || message.includes('*') || message.includes('/')) {
-    steps.push({
-      id: 'step-1',
-      thought: '用户需要进行数学计算，使用计算器工具。',
-      action: '计算器',
-      actionParams: { expression: message },
-      observation: '计算结果：42',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-2',
-      thought: '计算完成，可以给出最终答案。',
-      action: '总结回答',
-      observation: '已完成计算任务',
-      timestamp: new Date().toISOString(),
-    });
-  } else if (message.includes('日志') || message.includes('设备') || message.includes('故障')) {
-    steps.push({
-      id: 'step-1',
-      thought: '用户需要查看设备日志，我需要调用日志查询工具获取设备的运行日志。',
-      action: '设备日志查询',
-      actionParams: { deviceId: 'device-001', startTime: '2024-01-15 08:00:00', endTime: '2024-01-15 08:30:00' },
-      observation: longDeviceLog,
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-2',
-      thought: '日志已获取，现在分析日志内容并给出故障定位分析报告。',
-      action: '日志分析',
-      observation: '分析结果：1. 温度传感器曾出现异常(-100°C)，已自动恢复；2. 网络延迟在正常范围内；3. 设备整体状态良好。',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-3',
-      thought: '分析完成，可以总结回答用户的问题了。',
-      action: '总结回答',
-      observation: '已完成设备日志分析',
-      timestamp: new Date().toISOString(),
-    });
-  } else {
-    steps.push({
-      id: 'step-1',
-      thought: '用户提出了一个问题，我需要分析这个问题并决定是否需要调用工具。',
-      action: '分析问题',
-      observation: '问题分析完成',
-      timestamp: new Date().toISOString(),
-    });
-    steps.push({
-      id: 'step-2',
-      thought: '经过分析，我可以直接回答这个问题，不需要调用工具。',
-      action: '直接回答',
-      observation: '回答生成完成',
-      timestamp: new Date().toISOString(),
-    });
+    return {
+      steps: [
+        {
+          id: 'step-1',
+          thought: '用户想查询天气，调用天气查询工具获取当前天气信息。',
+          action: 'weather_query',
+          actionParams: { city: '北京' },
+          observation: '北京当前天气：晴朗，温度25°C，湿度60%',
+          timestamp: new Date().toISOString(),
+        },
+        {
+          id: 'step-2',
+          thought: '天气信息已获取，总结回答用户。',
+          action: '总结回答',
+          observation: '北京今日天气晴朗，温度25°C，适合外出。',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
   }
-  
-  return steps;
+
+  if (message.includes('用户信息') || message.includes('个人资料')) {
+    return {
+      steps: [
+        {
+          id: 'step-1',
+          thought: '用户需要查询用户信息，这是一个敏感操作。',
+          action: 'user_info_query',
+          actionParams: { userId: 'user123' },
+          observation: '需要用户确认后才能执行此操作',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      needConfirmation: {
+        action: 'user_info_query',
+        reason: '该操作涉及用户隐私数据，需要人工确认是否继续执行',
+      },
+    };
+  }
+
+  if (message.includes('计算') || message.includes('+') || message.includes('-') || message.includes('*') || message.includes('/')) {
+    return {
+      steps: [
+        {
+          id: 'step-1',
+          thought: '用户需要进行数学计算，调用计算器工具。',
+          action: 'calculator',
+          actionParams: { expression: message },
+          observation: '计算完成，结果：42',
+          timestamp: new Date().toISOString(),
+        },
+        {
+          id: 'step-2',
+          thought: '计算完成，给出最终答案。',
+          action: '总结回答',
+          observation: '计算结果为 42',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+
+  if (message.includes('日志') || message.includes('设备') || message.includes('故障')) {
+    return {
+      steps: [
+        {
+          id: 'step-1',
+          thought: '用户需要查看设备日志，调用日志查询工具。',
+          action: 'log_query',
+          actionParams: { deviceId: 'device-001', startTime: '2024-01-15 08:00:00', endTime: '2024-01-15 08:30:00' },
+          observation: longDeviceLog,
+          timestamp: new Date().toISOString(),
+        },
+        {
+          id: 'step-2',
+          thought: '日志已获取，分析日志内容。',
+          action: 'log_analysis',
+          actionParams: { deviceId: 'device-001' },
+          observation: '分析结果：1. 温度传感器曾出现异常(-100°C)，已自动恢复；2. 网络延迟在正常范围内；3. 设备整体状态良好。',
+          timestamp: new Date().toISOString(),
+        },
+        {
+          id: 'step-3',
+          thought: '分析完成，生成故障处置建议。',
+          action: '总结回答',
+          observation: '故障已定位：温度传感器偶发性故障，已自动恢复。建议持续监控。',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+  }
+
+  return {
+    steps: [
+      {
+        id: 'step-1',
+        thought: '用户提出了问题，开始分析。',
+        action: 'analyze',
+        actionParams: { query: message },
+        observation: '问题分析完成',
+        timestamp: new Date().toISOString(),
+      },
+      {
+        id: 'step-2',
+        thought: '分析完成，生成回答。',
+        action: '总结回答',
+        observation: `已收到您的问题：${message}，正在处理中...`,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  };
 }
 
 export async function chat(request: ChatRequest): Promise<ChatResponse> {
   const agent = mockAgent;
   const taskId = generateTaskId();
-  
+
   if (agent.mode === 'react') {
-    const steps = createReActSteps(request.message);
-    const requiresAction = agent.toolkits.find(t => t.name === steps[0]?.action && t.requiresConfirmation);
-    
-    mockReActSteps[taskId] = {
-      steps,
-      status: requiresAction ? 'WAITING_USER' : 'RUNNING',
+    const { steps, needConfirmation } = generateBackendResponse(request.message);
+
+    const context: TaskContext = {
+      taskId,
+      status: needConfirmation ? 'WAITING_USER' : 'RUNNING',
       currentStep: 0,
-      requiresAction: requiresAction ? {
-        action: steps[0].action!,
-        actionParams: steps[0].actionParams || {},
-        apiConfig: requiresAction,
+      steps: [],
+      requiresAction: needConfirmation ? {
+        action: needConfirmation.action,
+        actionParams: steps[0]?.actionParams || {},
+        reason: needConfirmation.reason,
       } : undefined,
     };
-    
+
+    taskStore[taskId] = context;
+
     return {
       taskId,
       mode: 'react',
+      status: needConfirmation ? 'need_confirmation' : 'running',
     };
   } else {
     await new Promise(resolve => setTimeout(resolve, 1500));
     return {
       mode: 'workflow',
-      answer: '这是来自工作流模式的响应：' + request.message,
+      answer: `工作流模式响应：已收到消息"${request.message}"`,
     };
   }
 }
 
 export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
   await new Promise(resolve => setTimeout(resolve, 800));
-  
-  const task = mockReActSteps[taskId];
+
+  const task = taskStore[taskId];
   if (!task) {
     return {
       taskId,
@@ -214,42 +221,40 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse>
       error: '任务不存在',
     };
   }
-  
-  const { steps, status, currentStep, finalAnswer } = task;
-  
-  if (status === 'WAITING_USER') {
+
+  if (task.status === 'WAITING_USER') {
     return {
       taskId,
       status: 'WAITING_USER',
       mode: 'react',
-      steps: steps.slice(0, currentStep),
+      steps: task.steps,
       requiresAction: task.requiresAction,
     };
   }
-  
-  if (currentStep < steps.length) {
+
+  if (task.status === 'RUNNING' && task.currentStep < task.steps.length) {
     task.currentStep += 1;
     return {
       taskId,
-      status: currentStep >= steps.length ? 'COMPLETED' : 'RUNNING',
+      status: task.currentStep >= task.steps.length ? 'COMPLETED' : 'RUNNING',
       mode: 'react',
-      steps: steps.slice(0, task.currentStep),
+      steps: task.steps.slice(0, task.currentStep),
     };
   }
-  
+
   return {
     taskId,
     status: 'COMPLETED',
     mode: 'react',
-    steps,
-    finalAnswer: finalAnswer || '根据分析，我为您整理了以下答案：\n\n' + steps.map(s => s.observation).join('\n'),
+    steps: task.steps,
+    finalAnswer: task.finalAnswer || task.steps.map(s => s.observation).join('\n'),
   };
 }
 
 export async function confirmAction(taskId: string, confirmed: boolean): Promise<TaskStatusResponse> {
   await new Promise(resolve => setTimeout(resolve, 500));
-  
-  const task = mockReActSteps[taskId];
+
+  const task = taskStore[taskId];
   if (!task) {
     return {
       taskId,
@@ -259,51 +264,41 @@ export async function confirmAction(taskId: string, confirmed: boolean): Promise
       error: '任务不存在',
     };
   }
-  
+
   if (!confirmed) {
     task.status = 'FAILED';
     return {
       taskId,
       status: 'FAILED',
       mode: 'react',
-      steps: task.steps.slice(0, task.currentStep),
+      steps: task.steps,
       error: '用户拒绝执行此操作',
     };
   }
-  
+
   task.status = 'RUNNING';
   task.requiresAction = undefined;
+
+  const { steps } = generateBackendResponse('continuation');
+  task.steps = steps;
+  task.currentStep = 0;
+
   return {
     taskId,
     status: 'RUNNING',
     mode: 'react',
-    steps: task.steps.slice(0, task.currentStep),
+    steps: [],
   };
 }
 
 export async function getAgentConfig(agentId: string): Promise<AgentConfig | null> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  return mockAgent;
+  await new Promise(resolve => setTimeout(resolve => {}, 300));
+  return { ...mockAgent };
 }
 
 export async function updateAgentConfig(config: Partial<AgentConfig>): Promise<AgentConfig> {
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve => {}, 500));
   Object.assign(mockAgent, config);
   mockAgent.updatedAt = new Date().toISOString();
-  return mockAgent;
-}
-
-export async function createToolkit(agentId: string, config: Omit<APIConfig, 'id'>): Promise<APIConfig> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  const newToolkit: APIConfig = {
-    ...config,
-    id: `toolkit-${Date.now()}`,
-  };
-  mockAgent.toolkits.push(newToolkit);
-  return newToolkit;
-}
-
-export async function deleteToolkit(agentId: string, toolkitId: string): Promise<void> {
-  await new Promise(resolve => setTimeout(resolve, 300));
-  mockAgent.toolkits = mockAgent.toolkits.filter(t => t.id !== toolkitId);
+  return { ...mockAgent };
 }
